@@ -107,7 +107,7 @@ def process():
             "https://openrouter.ai/api/v1/chat/completions",
             headers={"Authorization": f"Bearer {API_KEY}"},
             json={
-               "model": "google/gemini-2.0-flash-exp:free",
+               "model": "openrouter/free",
                 "messages": chat_history,
                 "temperature": 0.1 if mode == "read" else 0.35,
                 "max_tokens": 1500,

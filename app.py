@@ -7,7 +7,7 @@ app = Flask(__name__)
 AUDIO_DIR = os.path.join(os.path.dirname(__file__), 'static', 'audio')
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
-API_KEY = "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"
+API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 
 # قائمة الأصوات المتاحة
 VOICES = {

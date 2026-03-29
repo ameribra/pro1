@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>مساعد المكفوفين الذكي</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --clr-read:     #0055ff;
+            --clr-describe: #e05c00;
+            --clr-chat:     #009944;
+            --clr-settings: #7700cc;
+            --clr-bg:       #0a0a0f;
+            --clr-status:   #ff2d55;
+            --font:         'Tajawal', sans-serif;
+            --radius:       18px;
+            --transition:   0.25s cubic-bezier(.4,0,.2,1);
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body, html {
+            width: 100%; height: 100%;
+            background: var(--clr-bg);
+            font-family: var(--font);
+            overflow: hidden;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+
+        /* ─── كاميرا الخلفية ─── */
+        #video {
+            position: fixed; inset: 0;
+            width: 100vw; height: 100vh;
+            object-fit: cover;
+            opacity: 0.25; z-index: 1;
+            filter: blur(2px) saturate(0.6);
+        }
+        #canvas { display: none; }
+
+        /* ─── شريط الحالة ─── */
+        #status {
+            position: fixed; top: 0; left: 0; right: 0;
+            background: var(--clr-status);
+            color: #fff; text-align: center;
+            padding: 14px 20px; z-index: 100;
+            font-size: clamp(16px,4vw,22px); font-weight: 700;
+            display: none; letter-spacing: .5px;
+            animation: slideDown .3s ease;
+        }
+        @keyframes slideDown { from{transform:translateY(-100%)} to{transform:translateY(0)} }
+
+        /* ─── الشبكة الرئيسية ─── */
+        .grid {
+            position: fixed; inset: 0; z-index: 2;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 3px;
+            background: rgba(0,0,0,.5);
+        }
+
+        /* ─── كل زر ─── */
+        .btn {
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 10px; cursor: pointer;
+            color: #fff; font-family: var(--font); font-weight: 900;
+            font-size: clamp(20px, 5.5vw, 36px);
+            text-align: center; padding: 20px;
+            transition: filter var(--transition), transform var(--transition);
+            position: relative; overflow: hidden;
+            user-select: none;
+        }
+        .btn .icon { font-size: clamp(32px, 9vw, 60px); }
+        .btn .lbl  { line-height: 1.3; text-shadow: 0 2px 6px rgba(0,0,0,.6); }
+        .btn .sub  { font-size: clamp(12px, 2.8vw, 16px); opacity: .8; font-weight: 400; }
+
+        /* ألوان الأزرار */
+        #btn-read     { background: rgba(0,85,255,.72); }
+        #btn-describe { background: rgba(224,92,0,.72); }
+        #btn-chat     { background: rgba(0,153,68,.72); }
+        #btn-settings { background: rgba(119,0,204,.72); }
+
+        /* Ripple effect */
+        .btn::after {
+            content:''; position:absolute; inset:0;
+            background: rgba(255,255,255,.08);
+            transform: scale(0); border-radius: 50%;
+            transition: transform .4s, opacity .4s;
+            opacity: 0;
+        }
+        .btn:active::after { transform: scale(3); opacity: 1; transition: none; }
+        .btn:active { filter: brightness(1.3); transform: scale(.97); }
+
+        /* ─── لوحة الإعدادات ─── */
+        #settings-panel {
+            position: fixed; inset: 0; z-index: 200;
+            background: rgba(0,0,0,.92);
+            display: none; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 28px; padding: 30px;
+            backdrop-filter: blur(10px);
+        }
+        #settings-panel.open { display: flex; }
+        #settings-panel h2 {
+            color: #fff; font-size: clamp(22px,5vw,34px); font-weight: 900;
+        }
+        .setting-row {
+            width: 100%; max-width: 480px;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .setting-row label {
+            color: #ccc; font-size: clamp(14px,3.5vw,18px);
+        }
+        .setting-row select,
+        .setting-row input[type=range] {
+            width: 100%; padding: 12px 16px;
+            border-radius: var(--radius); border: none;
+            background: #1e1e2e; color: #fff;
+            font-family: var(--font); font-size: 16px;
+            appearance: none; cursor: pointer;
+        }
+        .setting-row input[type=range] { padding: 10px 0; accent-color: var(--clr-settings); }
+
+        .speed-labels { display:flex; justify-content:space-between; color:#888; font-size:12px; }
+
+        #close-settings, #test-voice {
+            width: 100%; max-width: 480px;
+            padding: 16px; border-radius: var(--radius); border: none;
+            font-family: var(--font); font-size: clamp(16px,4vw,20px);
+            font-weight: 700; cursor: pointer; transition: filter .2s;
+        }
+        #close-settings { background: var(--clr-settings); color: #fff; }
+        #test-voice     { background: #1e1e2e; color: #ccc; }
+        #close-settings:active, #test-voice:active { filter: brightness(1.3); }
+
+        /* ─── عرض النص المستخرج ─── */
+        #text-panel {
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 150;
+            background: rgba(10,10,15,.96);
+            border-top: 2px solid rgba(255,255,255,.1);
+            max-height: 45vh; overflow-y: auto;
+            padding: 20px; display: none;
+            backdrop-filter: blur(16px);
+        }
+        #text-panel.open { display: block; }
+        #text-content {
+            color: #f0f0f0; font-size: clamp(16px,4vw,22px);
+            line-height: 1.9; white-space: pre-wrap;
+        }
+        #close-text {
+            position: absolute; top: 12px; left: 14px;
+            background: none; border: none;
+            color: #888; font-size: 26px; cursor: pointer;
+        }
+
+        /* ─── مؤشر الصوت ─── */
+        #audio-indicator {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            z-index: 160; display: none; align-items: center; gap: 10px;
+            background: rgba(0,0,0,.8); border-radius: 50px;
+            padding: 10px 22px; color: #fff; font-size: 16px;
+            backdrop-filter: blur(8px);
+        }
+        #audio-indicator.active { display: flex; }
+        .wave { display:flex; gap:3px; align-items:flex-end; height:20px; }
+        .wave span {
+            display:block; width:4px; background:#fff; border-radius:2px;
+            animation: wavePulse 1s ease-in-out infinite;
+        }
+        .wave span:nth-child(2){animation-delay:.1s}
+        .wave span:nth-child(3){animation-delay:.2s}
+        .wave span:nth-child(4){animation-delay:.3s}
+        .wave span:nth-child(5){animation-delay:.4s}
+        @keyframes wavePulse {
+            0%,100%{height:4px} 50%{height:18px}
+        }
+    </style>
+</head>
+<body>
+
+    <div id="status">جاري المعالجة...</div>
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+
+    <!-- شبكة الأزرار الرئيسية -->
+    <div class="grid">
+        <div id="btn-read" class="btn" onclick="handleAction('read')" role="button" aria-label="قراءة النص">
+            <span class="icon">📖</span>
+            <span class="lbl">اقرأ النص</span>
+            <span class="sub">يستخرج الكتابة من الصورة</span>
+        </div>
+        <div id="btn-describe" class="btn" onclick="handleAction('describe')" role="button" aria-label="وصف المشهد">
+            <span class="icon">👁️</span>
+            <span class="lbl">صف المشهد</span>
+            <span class="sub">يصف ما أمامك بالتفصيل</span>
+        </div>
+        <div id="btn-chat" class="btn" onclick="handleAction('chat')" role="button" aria-label="تحدث مع المساعد">
+            <span class="icon">🎙️</span>
+            <span class="lbl">تحدث معي</span>
+            <span class="sub">اسأل بصوتك</span>
+        </div>
+        <div id="btn-settings" class="btn" onclick="openSettings()" role="button" aria-label="الإعدادات">
+            <span class="icon">⚙️</span>
+            <span class="lbl">الإعدادات</span>
+            <span class="sub">الصوت والسرعة</span>
+        </div>
+    </div>
+
+    <!-- لوحة الإعدادات -->
+    <div id="settings-panel">
+        <h2>⚙️ الإعدادات</h2>
+
+        <div class="setting-row">
+            <label>🔊 الصوت</label>
+            <select id="voice-select">
+                <option value="ar-EG-SalmaNeural">سلمى (مصري)</option>
+                <option value="ar-SA-ZariyahNeural">زارية (سعودي)</option>
+                <option value="ar-IQ-BasselNeural">باسل (عراقي)</option>
+            </select>
+        </div>
+
+        <div class="setting-row">
+            <label>⚡ سرعة القراءة</label>
+            <input type="range" id="speed-range" min="-50" max="100" value="0" step="10">
+            <div class="speed-labels"><span>أبطأ</span><span>طبيعي</span><span>أسرع</span></div>
+        </div>
+
+        <button id="test-voice" onclick="testVoice()">🔈 تجربة الصوت</button>
+        <button id="close-settings" onclick="saveSettings()">✅ حفظ وإغلاق</button>
+    </div>
+
+    <!-- لوحة عرض النص -->
+    <div id="text-panel">
+        <button id="close-text" onclick="closeTextPanel()">✕</button>
+        <div id="text-content"></div>
+    </div>
+
+    <!-- مؤشر تشغيل الصوت -->
+    <div id="audio-indicator">
+        <div class="wave">
+            <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        يتحدث...
+    </div>
+
+    <script>
+    // ─── الحالة ────────────────────────────────────────────────────────
+    const video      = document.getElementById('video');
+    const canvas     = document.getElementById('canvas');
+    const statusBox  = document.getElementById('status');
+    const textPanel  = document.getElementById('text-panel');
+    const textContent= document.getElementById('text-content');
+    const audioInd   = document.getElementById('audio-indicator');
+
+    let isProcessing = false;
+    let currentAudio = null;
+    let settings     = { voice: 'ar-EG-SalmaNeural', speed: '+0%' };
+
+    // ─── تشغيل الكاميرا ────────────────────────────────────────────────
+    navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width:{ideal:1280}, height:{ideal:720} }
+    }).then(s => { video.srcObject = s; })
+      .catch(() => speakLocal('يرجى السماح بالوصول للكاميرا'));
+
+    // ─── الردود الفورية بالمتصفح ───────────────────────────────────────
+    function speakLocal(text, dur = 150) {
+        if (navigator.vibrate) navigator.vibrate(dur);
+        window.speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = 'ar-SA'; u.rate = 1.1;
+        window.speechSynthesis.speak(u);
+    }
+
+    // ─── التصرف بناء على الزر ──────────────────────────────────────────
+    function handleAction(mode) {
+        if (isProcessing) { speakLocal('يرجى الانتظار'); return; }
+        stopCurrentAudio();
+        closeTextPanel();
+
+        if (mode === 'read') {
+            speakLocal('جاري تصوير النص', 100);
+            sendData('read', '');
+        } else if (mode === 'describe') {
+            speakLocal('جاري تحليل المشهد', 100);
+            sendData('describe', '');
+        } else {
+            speakLocal('أنا أسمعك، تفضل', 200);
+            startListening();
+        }
+    }
+
+    // ─── التعرف على الصوت ──────────────────────────────────────────────
+    function startListening() {
+        const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRec) { speakLocal('المتصفح لا يدعم التعرف على الصوت'); return; }
+
+        const rec = new SpeechRec();
+        rec.lang = 'ar-SA'; rec.continuous = false; rec.interimResults = false;
+        rec.maxAlternatives = 1;
+
+        rec.onstart = () => {
+            statusBox.innerText = '🎙️ أنا أسمعك...';
+            statusBox.style.background = '#00a844';
+            statusBox.style.display = 'block';
+        };
+        rec.onresult = (e) => {
+            const query = e.results[0][0].transcript.trim();
+            statusBox.style.display = 'none';
+            sendData('chat', query);
+        };
+        rec.onerror = () => {
+            statusBox.style.display = 'none';
+            speakLocal('لم أسمعك جيداً، حاول مرة أخرى', 50);
+        };
+        rec.onend = () => { statusBox.style.display = 'none'; };
+        rec.start();
+    }
+
+    // ─── إرسال البيانات للخادم ─────────────────────────────────────────
+    function sendData(mode, query) {
+        isProcessing = true;
+        showStatus(mode);
+
+        // التقاط الصورة
+        canvas.width  = video.videoWidth  || 640;
+        canvas.height = video.videoHeight || 480;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+
+        canvas.toBlob(blob => {
+            const fd = new FormData();
+            fd.append('image', blob, 'img.jpg');
+            fd.append('mode',  mode);
+            fd.append('query', query);
+
+            fetch('/process', { method:'POST', body:fd })
+                .then(r => r.json())
+                .then(data => {
+                    statusBox.style.display = 'none';
+                    if (data.audio_url) {
+                        showTextPanel(data.text);
+                        playAudio(data.audio_url);
+                    } else {
+                        speakLocal(data.error || 'حدث خطأ ما');
+                    }
+                })
+                .catch(() => {
+                    statusBox.style.display = 'none';
+                    speakLocal('فشل الاتصال بالخادم');
+                })
+                .finally(() => { isProcessing = false; });
+        }, 'image/jpeg', 0.75);
+    }
+
+    // ─── تشغيل الصوت ──────────────────────────────────────────────────
+    function playAudio(url) {
+        stopCurrentAudio();
+        currentAudio = new Audio(url);
+        audioInd.classList.add('active');
+        currentAudio.onplay  = () => audioInd.classList.add('active');
+        currentAudio.onended = () => audioInd.classList.remove('active');
+        currentAudio.onerror = () => {
+            audioInd.classList.remove('active');
+            speakLocal('تعذر تشغيل الصوت');
+        };
+        currentAudio.play().catch(() => speakLocal('تعذر تشغيل الصوت'));
+    }
+
+    function stopCurrentAudio() {
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio.currentTime = 0;
+            currentAudio = null;
+        }
+        audioInd.classList.remove('active');
+        window.speechSynthesis.cancel();
+    }
+
+    // ─── واجهة المستخدم ────────────────────────────────────────────────
+    function showStatus(mode) {
+        const msgs = {
+            read:     '📖 جاري استخراج النص...',
+            describe: '👁️ جاري تحليل المشهد...',
+            chat:     '💭 جاري البحث عن إجابة...',
+        };
+        statusBox.innerText = msgs[mode] || '⏳ جاري المعالجة...';
+        statusBox.style.background = '#ff2d55';
+        statusBox.style.display    = 'block';
+    }
+
+    function showTextPanel(text) {
+        textContent.innerText = text || '';
+        textPanel.classList.add('open');
+    }
+
+    function closeTextPanel() {
+        textPanel.classList.remove('open');
+    }
+
+    // ─── الإعدادات ─────────────────────────────────────────────────────
+    function openSettings() {
+        document.getElementById('settings-panel').classList.add('open');
+        speakLocal('لوحة الإعدادات', 50);
+    }
+
+    function saveSettings() {
+        const voiceSel = document.getElementById('voice-select').value;
+        const speedVal = parseInt(document.getElementById('speed-range').value);
+        const speedStr = (speedVal >= 0 ? '+' : '') + speedVal + '%';
+
+        settings = { voice: voiceSel, speed: speedStr };
+
+        fetch('/settings', {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body: JSON.stringify(settings)
+        });
+
+        document.getElementById('settings-panel').classList.remove('open');
+        speakLocal('تم حفظ الإعدادات');
+    }
+
+    function testVoice() {
+        fetch('/process', {
+            method:'POST',
+            body: (() => {
+                const fd = new FormData();
+                fd.append('mode','chat');
+                fd.append('query','مرحباً، هذا اختبار للصوت، أتمنى أن تكون بخير.');
+                return fd;
+            })()
+        }).then(r=>r.json()).then(d=>{ if(d.audio_url) playAudio(d.audio_url); });
+    }
+
+    // ─── إيقاف الصوت بالنقر المزدوج ──────────────────────────────────
+    document.addEventListener('dblclick', () => {
+        stopCurrentAudio();
+        speakLocal('تم الإيقاف', 30);
+    });
+
+    // ─── تنظيف دوري ───────────────────────────────────────────────────
+    setInterval(() => fetch('/cleanup', { method:'POST' }), 5 * 60 * 1000);
+
+    // ─── منع التمرير ──────────────────────────────────────────────────
+    document.addEventListener('touchmove', e => e.preventDefault(), { passive:false });
+    </script>
+</body>
+</html>
